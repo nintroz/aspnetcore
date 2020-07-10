@@ -74,19 +74,21 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding.Metadata
                 context.BindingMetadata.IsBindingRequired = bindingBehavior.Behavior == BindingBehavior.Required;
             }
 
-            if (context.BindingMetadata.IsBindingAllowed)
+            var boundConstructor = FindBoundConstructor(context);
+            if (boundConstructor != null)
             {
-                var boundConstructor = FindBoundConstructor(context);
-                if (boundConstructor != null)
-                {
-                    context.BindingMetadata.BoundConstructor = boundConstructor;
-                }
+                context.BindingMetadata.BoundConstructor = boundConstructor;
             }
         }
 
         private ConstructorInfo FindBoundConstructor(BindingMetadataProviderContext context)
         {
             var type = context.Key.ModelType;
+
+            if (type.IsAbstract || type.IsValueType || type.IsInterface)
+            {
+                return null;
+            }
 
             var constructors = type.GetConstructors();
             if (constructors.Length == 0)
@@ -101,24 +103,24 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding.Metadata
             }
             else if (modelBindingConstructors.Count == 1)
             {
-                var boundConstructor = modelBindingConstructors[0];
-                if (boundConstructor.GetParameters().Length == 0)
-                {
-                    // Parameterless constructors do need special handling.
-                    return null;
-                }
-
-                return boundConstructor;
+                return modelBindingConstructors[0];
             }
 
-            // All things being equal, we prefer using a parameterless constructor.
-            if (constructors.Any(c => c.GetParameters().Length == 0))
+            var parameterlessConstructor = constructors.FirstOrDefault(c => c.GetParameters().Length == 0);
+            if (parameterlessConstructor != null)
             {
+                return parameterlessConstructor;
+            }
+            
+            // Attempt to find the unequivocal longest constructor
+            var orderedConstructors = constructors.OrderByDescending(c => c.GetParameters().Length).ToList();
+            if (orderedConstructors.Count > 1 && orderedConstructors[1].GetParameters().Length == orderedConstructors[0].GetParameters().Length)
+            {
+                // Multiple constructors found with the same length. 
                 return null;
             }
 
-            // Pick the longest constructor.
-            return constructors.OrderByDescending(c => c.GetParameters().Length).First();
+            return orderedConstructors[0];
         }
 
         private static BindingBehaviorAttribute FindBindingBehavior(BindingMetadataProviderContext context)

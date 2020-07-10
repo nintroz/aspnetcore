@@ -417,7 +417,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         /// <summary>
         /// Gets a delegate that invokes the constructor.
         /// </summary>
-        public abstract Func<object[], object> BoundConstructorInvoker { get; }
+        public abstract Func<object[], object> ConstructorInvoker { get; }
 
         /// <summary>
         /// Gets a display name for the model.

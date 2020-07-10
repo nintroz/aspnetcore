@@ -551,7 +551,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding.Metadata
         public override Action<object, object> PropertySetter => _details.PropertySetter;
 
         /// <inheritdoc />
-        public override Func<object[], object> BoundConstructorInvoker => _details.BoundConstructorInvoker;
+        public override Func<object[], object> ConstructorInvoker => _details.BoundConstructorInvoker;
 
         /// <inheritdoc />
         public override ModelMetadata GetMetadataForType(Type modelType)

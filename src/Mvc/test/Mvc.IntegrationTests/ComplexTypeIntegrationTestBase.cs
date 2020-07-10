@@ -20,7 +20,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
 {
     // Integration tests targeting the behavior of the ComplexTypeModelBinder and related classes
     // with other model binders.
-    public class ConstructorParametersBinderIntegrationTest
+    public abstract class ComplexTypeIntegrationTestBase
     {
         private const string AddressBodyContent = "{ \"street\" : \"" + AddressStreetContent + "\" }";
         private const string AddressStreetContent = "1 Microsoft Way";
@@ -28,14 +28,50 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         private static readonly byte[] ByteArrayContent = Encoding.BigEndianUnicode.GetBytes("abcd");
         private static readonly string ByteArrayEncoded = Convert.ToBase64String(ByteArrayContent);
 
-        private record Order1(int ProductId, Person1 Customer);
-
-        private record Person1(string Name, [FromBody] Address1 Address);
-
-        private record Address1(string Street);
+        protected abstract Type ExpectedModelBinderType { get; }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_Success()
+        public void ExpectedModelBinderIsConstructed()
+        {
+            // Arrange
+            var parameter = new ParameterDescriptor()
+            {
+                Name = "parameter",
+                ParameterType = typeof(Order1)
+            };
+            var testContext = GetTestContext();
+
+            var metadata = GetMetadata(testContext, parameter);
+
+            // Act
+            var modelBinder = GetModelBinder(testContext, parameter, metadata);
+
+            // Assert
+            Assert.Equal(ExpectedModelBinderType, modelBinder.GetType());
+        }
+
+        private class Order1
+        {
+            public int ProductId { get; set; }
+
+            public Person1 Customer { get; set; }
+        }
+
+        private class Person1
+        {
+            public string Name { get; set; }
+
+            [FromBody]
+            public Address1 Address { get; set; }
+        }
+
+        private class Address1
+        {
+            public string Street { get; set; }
+        }
+
+        [Fact]
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -45,7 +81,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Customer.Name=bill");
                 SetJsonBodyContent(request, AddressBodyContent);
@@ -85,7 +121,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithBodyModelBinder_WithEmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithBodyModelBinder_WithEmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -95,7 +131,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Customer.Name=bill");
                 SetJsonBodyContent(request, AddressBodyContent);
@@ -135,7 +171,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_NoBodyData()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_NoBodyData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -145,7 +181,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Customer.Name=bill");
                 request.ContentType = "application/json";
@@ -186,7 +222,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_PartialData()
+        public async Task ComplexTypeModelBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_PartialData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -196,7 +232,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.ProductId=10");
                 SetJsonBodyContent(request, AddressBodyContent);
@@ -235,7 +271,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_NoData()
+        public async Task ComplexTypeModelBinder_BindsNestedPOCO_WithBodyModelBinder_WithPrefix_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -245,7 +281,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
                 SetJsonBodyContent(request, AddressBodyContent);
@@ -278,12 +314,22 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.True(modelState.IsValid);
         }
 
-        private record Order3(int ProductId, Person3 Customer);
+        private class Order3
+        {
+            public int ProductId { get; set; }
 
-        private record Person3(string Name, byte[] Token);
+            public Person3 Customer { get; set; }
+        }
+
+        private class Person3
+        {
+            public string Name { get; set; }
+
+            public byte[] Token { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithByteArrayModelBinder_WithPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithByteArrayModelBinder_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -293,7 +339,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString =
                     new QueryString("?parameter.Customer.Name=bill&parameter.Customer.Token=" + ByteArrayEncoded);
@@ -336,7 +382,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithByteArrayModelBinder_WithEmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithByteArrayModelBinder_WithEmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -346,7 +392,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Customer.Name=bill&Customer.Token=" + ByteArrayEncoded);
             });
@@ -388,7 +434,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithByteArrayModelBinder_WithPrefix_NoData()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithByteArrayModelBinder_WithPrefix_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -398,7 +444,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Customer.Name=bill");
             });
@@ -435,12 +481,22 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("bill", entry.RawValue);
         }
 
-        private record Order4(int ProductId, Person4 Customer);
+        private class Order4
+        {
+            public int ProductId { get; set; }
 
-        private record Person4(string Name, IEnumerable<IFormFile> Documents);
+            public Person4 Customer { get; set; }
+        }
+
+        private class Person4
+        {
+            public string Name { get; set; }
+
+            public IEnumerable<IFormFile> Documents { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -450,7 +506,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Customer.Name=bill");
                 SetFormFileBodyContent(request, "Hello, World!", "parameter.Customer.Documents");
@@ -493,7 +549,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithFormFileModelBinder_WithEmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithFormFileModelBinder_WithEmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -503,7 +559,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Customer.Name=bill");
                 SetFormFileBodyContent(request, "Hello, World!", "Customer.Documents");
@@ -546,7 +602,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_NoBodyData()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_NoBodyData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -556,7 +612,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Customer.Name=bill");
 
@@ -597,7 +653,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_PartialData()
+        public async Task ComplexTypeModelBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_PartialData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -607,7 +663,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.ProductId=10");
                 SetFormFileBodyContent(request, "Hello, World!", "parameter.Customer.Documents");
@@ -654,7 +710,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_NoData()
+        public async Task ComplexTypeModelBinder_BindsNestedPOCO_WithFormFileModelBinder_WithPrefix_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -664,7 +720,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
                 SetFormFileBodyContent(request, "Hello, World!", "Customer.Documents");
@@ -705,10 +761,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("Customer.Documents", entry.Key);
         }
 
-        private record Order5(string Name, int[] ProductIds);
+        private class Order5
+        {
+            public string Name { get; set; }
+
+            public int[] ProductIds { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsArrayProperty_WithPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsArrayProperty_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -718,7 +779,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString =
                     new QueryString("?parameter.Name=bill&parameter.ProductIds[0]=10&parameter.ProductIds[1]=11");
@@ -764,7 +825,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsArrayProperty_EmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsArrayProperty_EmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -774,7 +835,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Name=bill&ProductIds[0]=10&ProductIds[1]=11");
             });
@@ -819,7 +880,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsArrayProperty_NoCollectionData()
+        public async Task MutableObjectModelBinder_BindsArrayProperty_NoCollectionData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -829,7 +890,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Name=bill");
             });
@@ -866,7 +927,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsArrayProperty_NoData()
+        public async Task MutableObjectModelBinder_BindsArrayProperty_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -876,7 +937,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -908,10 +969,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.True(modelState.IsValid);
         }
 
-        private record Order6(string Name, List<int> ProductIds);
+        private class Order6
+        {
+            public string Name { get; set; }
+
+            public List<int> ProductIds { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsListProperty_WithPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsListProperty_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -921,7 +987,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString =
                     new QueryString("?parameter.Name=bill&parameter.ProductIds[0]=10&parameter.ProductIds[1]=11");
@@ -967,7 +1033,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsListProperty_EmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsListProperty_EmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -977,7 +1043,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Name=bill&ProductIds[0]=10&ProductIds[1]=11");
             });
@@ -1022,7 +1088,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsListProperty_NoCollectionData()
+        public async Task MutableObjectModelBinder_BindsListProperty_NoCollectionData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1032,7 +1098,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Name=bill");
             });
@@ -1069,7 +1135,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsListProperty_NoData()
+        public async Task MutableObjectModelBinder_BindsListProperty_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1079,7 +1145,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -1111,10 +1177,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.True(modelState.IsValid);
         }
 
-        private record Order7(string Name, Dictionary<string, int> ProductIds);
+        private class Order7
+        {
+            public string Name { get; set; }
+
+            public Dictionary<string, int> ProductIds { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_WithPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1124,7 +1195,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString =
                     new QueryString("?parameter.Name=bill&parameter.ProductIds[0].Key=key0&parameter.ProductIds[0].Value=10");
@@ -1170,7 +1241,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_EmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_EmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1180,7 +1251,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Name=bill&ProductIds[0].Key=key0&ProductIds[0].Value=10");
             });
@@ -1225,7 +1296,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_NoCollectionData()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_NoCollectionData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1235,7 +1306,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Name=bill");
             });
@@ -1272,7 +1343,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_NoData()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1282,7 +1353,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -1315,17 +1386,35 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         // Dictionary property with an IEnumerable<> value type
-        private record Car1(string Name, Dictionary<string, IEnumerable<SpecDoc>> Specs);
+        private class Car1
+        {
+            public string Name { get; set; }
+
+            public Dictionary<string, IEnumerable<SpecDoc>> Specs { get; set; }
+        }
 
         // Dictionary property with an Array value type
-        private record Car2(string Name, Dictionary<string, SpecDoc[]> Specs);
+        private class Car2
+        {
+            public string Name { get; set; }
 
-        private record Car3(string Name, IEnumerable<KeyValuePair<string, IEnumerable<SpecDoc>>> Specs);
+            public Dictionary<string, SpecDoc[]> Specs { get; set; }
+        }
 
-        private record SpecDoc(string Name);
+        private class Car3
+        {
+            public string Name { get; set; }
+
+            public IEnumerable<KeyValuePair<string, IEnumerable<SpecDoc>>> Specs { get; set; }
+        }
+
+        private class SpecDoc
+        {
+            public string Name { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_WithIEnumerableComplexTypeValue_Success()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_WithIEnumerableComplexTypeValue_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1334,7 +1423,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Car1)
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 var queryString = "?p.Name=Accord"
                         + "&p.Specs[0].Key=camera_specs"
@@ -1432,7 +1521,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_WithArrayOfComplexTypeValue_Success()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_WithArrayOfComplexTypeValue_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1441,7 +1530,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Car2)
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 var queryString = "?p.Name=Accord"
                         + "&p.Specs[0].Key=camera_specs"
@@ -1539,7 +1628,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsDictionaryProperty_WithIEnumerableOfKeyValuePair_Success()
+        public async Task MutableObjectModelBinder_BindsDictionaryProperty_WithIEnumerableOfKeyValuePair_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1548,7 +1637,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Car3)
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 var queryString = "?p.Name=Accord"
                         + "&p.Specs[0].Key=camera_specs"
@@ -1645,10 +1734,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("tyre_spec2.txt", entry.RawValue);
         }
 
-        private record Order8(KeyValuePair<string, int> ProductId, string Name = default!);
+        private class Order8
+        {
+            public string Name { get; set; } = default!;
+
+            public KeyValuePair<string, int> ProductId { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsKeyValuePairProperty_WithPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsKeyValuePairProperty_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1658,7 +1752,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString =
                     new QueryString("?parameter.Name=bill&parameter.ProductId.Key=key0&parameter.ProductId.Value=10");
@@ -1704,7 +1798,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_BindsKeyValuePairProperty_EmptyPrefix_Success()
+        public async Task MutableObjectModelBinder_BindsKeyValuePairProperty_EmptyPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1714,7 +1808,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Name=bill&ProductId.Key=key0&ProductId.Value=10");
             });
@@ -1759,7 +1853,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact(Skip = "https://github.com/dotnet/aspnetcore/issues/11813")]
-        public async Task ConstructorBinder_BindsKeyValuePairProperty_NoCollectionData()
+        public async Task MutableObjectModelBinder_BindsKeyValuePairProperty_NoCollectionData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1769,7 +1863,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Name=bill");
             });
@@ -1808,7 +1902,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact(Skip = "https://github.com/dotnet/aspnetcore/issues/11813")]
-        public async Task ConstructorBinder_BindsKeyValuePairProperty_NoData()
+        public async Task MutableObjectModelBinder_BindsKeyValuePairProperty_NoData()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1818,7 +1912,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -1852,10 +1946,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Single(entry.Errors);
         }
 
-        private record Car4(string Name, KeyValuePair<string, Dictionary<string, string>> Specs);
+        private class Car4
+        {
+            public string Name { get; set; }
+
+            public KeyValuePair<string, Dictionary<string, string>> Specs { get; set; }
+        }
 
         [Fact]
-        public async Task Foo_ConstructorBinder_BindsKeyValuePairProperty_WithPrefix_Success()
+        public async Task Foo_MutableObjectModelBinder_BindsKeyValuePairProperty_WithPrefix_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1865,7 +1964,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 var queryString = "?p.Name=Accord"
                                 + "&p.Specs.Key=camera_specs"
@@ -1940,14 +2039,21 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("spec2.txt", entry.RawValue);
         }
 
-        private record Order9(Person9 Customer);
+        private class Order9
+        {
+            public Person9 Customer { get; set; }
+        }
 
-        private record Person9([FromBody] Address1 Address);
+        private class Person9
+        {
+            [FromBody]
+            public Address1 Address { get; set; }
+        }
 
         // If a nested POCO object has all properties bound from a greedy source, then it should be populated
         // if the top-level object is created.
         [Fact]
-        public async Task ConstructorBinder_BindsNestedPOCO_WithAllGreedyBoundProperties()
+        public async Task MutableObjectModelBinder_BindsNestedPOCO_WithAllGreedyBoundProperties()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -1957,7 +2063,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
                 SetJsonBodyContent(request, AddressBodyContent);
@@ -1992,12 +2098,19 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.True(modelState.IsValid);
         }
 
-        private record Order10([BindRequired] Person10 Customer);
+        private class Order10
+        {
+            [BindRequired]
+            public Person10 Customer { get; set; }
+        }
 
-        private record Person10(string Name);
+        private class Person10
+        {
+            public string Name { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredComplexProperty_NoData_GetsErrors()
+        public async Task MutableObjectModelBinder_WithRequiredComplexProperty_NoData_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2007,7 +2120,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext();
+            var testContext = GetTestContext();
 
             var modelState = testContext.ModelState;
             var metadata = GetMetadata(testContext, parameter);
@@ -2042,13 +2155,12 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithBindRequired_NoData_AndCustomizedMessage_AddsGivenMessage()
+        public async Task MutableObjectModelBinder_WithBindRequired_NoData_AndCustomizedMessage_AddsGivenMessage()
         {
             // Arrange
-            var parameterInfo = typeof(Order10).GetConstructor(new[] { typeof(Person10) }).GetParameters()[0];
             var metadataProvider = new TestModelMetadataProvider();
             metadataProvider
-                .ForParameter(parameterInfo)
+                .ForProperty(typeof(Order10), nameof(Order10.Customer))
                 .BindingDetails((Action<ModelBinding.Metadata.BindingMetadata>)(binding =>
                 {
                     // A real details provider could customize message based on BindingMetadataProviderContext.
@@ -2063,7 +2175,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(metadataProvider: metadataProvider);
+            var testContext = GetTestContext(metadataProvider: metadataProvider);
 
             var modelState = testContext.ModelState;
             var metadata = GetMetadata(testContext, parameter);
@@ -2097,12 +2209,21 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("Hurts when 'Customer' is not provided.", error.ErrorMessage);
         }
 
-        private record Order11(Person11 Customer);
+        private class Order11
+        {
+            public Person11 Customer { get; set; }
+        }
 
-        private record Person11(int Id, [BindRequired] string Name);
+        private class Person11
+        {
+            public int Id { get; set; }
+
+            [BindRequired]
+            public string Name { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_WithNestedRequiredProperty_WithPartialData_GetsErrors()
+        public async Task MutableObjectModelBinder_WithNestedRequiredProperty_WithPartialData_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2112,7 +2233,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.Customer.Id=123");
             });
@@ -2156,7 +2277,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithNestedRequiredProperty_WithData_EmptyPrefix_GetsErrors()
+        public async Task MutableObjectModelBinder_WithNestedRequiredProperty_WithData_EmptyPrefix_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2166,7 +2287,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?Customer.Id=123");
             });
@@ -2210,7 +2331,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithNestedRequiredProperty_WithData_CustomPrefix_GetsErrors()
+        public async Task MutableObjectModelBinder_WithNestedRequiredProperty_WithData_CustomPrefix_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2224,7 +2345,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?customParameter.Customer.Id=123");
             });
@@ -2267,10 +2388,14 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("A value for the 'Name' parameter or property was not provided.", error.ErrorMessage);
         }
 
-        private record Order12([BindRequired] string ProductName);
+        private class Order12
+        {
+            [BindRequired]
+            public string ProductName { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredProperty_NoData_GetsErrors()
+        public async Task MutableObjectModelBinder_WithRequiredProperty_NoData_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2280,7 +2405,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -2318,7 +2443,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredProperty_NoData_CustomPrefix_GetsErrors()
+        public async Task MutableObjectModelBinder_WithRequiredProperty_NoData_CustomPrefix_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2332,7 +2457,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -2370,7 +2495,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredProperty_WithData_EmptyPrefix_GetsBound()
+        public async Task MutableObjectModelBinder_WithRequiredProperty_WithData_EmptyPrefix_GetsBound()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2380,7 +2505,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?ProductName=abc");
             });
@@ -2415,10 +2540,14 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("abc", entry.AttemptedValue);
         }
 
-        private record Order13([BindRequired] List<int> OrderIds);
+        private class Order13
+        {
+            [BindRequired]
+            public List<int> OrderIds { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredCollectionProperty_NoData_GetsErrors()
+        public async Task MutableObjectModelBinder_WithRequiredCollectionProperty_NoData_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2428,7 +2557,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -2466,7 +2595,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredCollectionProperty_NoData_CustomPrefix_GetsErrors()
+        public async Task MutableObjectModelBinder_WithRequiredCollectionProperty_NoData_CustomPrefix_GetsErrors()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2480,7 +2609,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // No Data
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?");
             });
@@ -2518,7 +2647,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         }
 
         [Fact]
-        public async Task ConstructorBinder_WithRequiredCollectionProperty_WithData_EmptyPrefix_GetsBound()
+        public async Task MutableObjectModelBinder_WithRequiredCollectionProperty_WithData_EmptyPrefix_GetsBound()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2527,7 +2656,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Order13),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?OrderIds[0]=123");
             });
@@ -2562,12 +2691,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("123", entry.AttemptedValue);
         }
 
-        private record Order14(int ProductId);
+        private class Order14
+        {
+            public int ProductId { get; set; }
+        }
 
         // This covers the case where a key is present, but has an empty value. The type converter
         // will report an error.
         [Fact]
-        public async Task ConstructorBinder_BindsPOCO_TypeConvertedPropertyNonConvertibleValue_GetsError()
+        public async Task MutableObjectModelBinder_BindsPOCO_TypeConvertedPropertyNonConvertibleValue_GetsError()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2577,7 +2709,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.ProductId=");
             });
@@ -2621,7 +2753,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         // report and error because it's a value type (non-nullable).
         [Fact]
         [ReplaceCulture]
-        public async Task ConstructorBinder_BindsPOCO_TypeConvertedPropertyWithEmptyValue_Error()
+        public async Task MutableObjectModelBinder_BindsPOCO_TypeConvertedPropertyWithEmptyValue_Error()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2631,7 +2763,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString("?parameter.ProductId");
             });
@@ -2670,10 +2802,16 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.False(modelState.IsValid);
         }
 
-        private record Person12(Address12 Address);
+        private class Person12
+        {
+            public Address12 Address { get; set; }
+        }
 
         [ModelBinder(Name = "HomeAddress")]
-        private record Address12(string Street);
+        private class Address12
+        {
+            public string Street { get; set; }
+        }
 
         // Make sure the metadata is honored when a [ModelBinder] attribute is associated with a class somewhere in the
         // type hierarchy of an action parameter. This should behave identically to such an attribute on a property in
@@ -2692,7 +2830,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Person12),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(
+            var testContext = GetTestContext(
                 request => request.QueryString = new QueryString("?HomeAddress.Street=someStreet"));
 
             var modelState = testContext.ModelState;
@@ -2741,7 +2879,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Address12),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(
+            var testContext = GetTestContext(
                 request => request.QueryString = new QueryString("?HomeAddress.Street=someStreet"));
 
             var modelState = testContext.ModelState;
@@ -2773,10 +2911,22 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal(ModelValidationState.Valid, entry.ValidationState);
         }
 
-        private record Person13(Address13 Address);
+        private class Person13
+        {
+            public Address13 Address { get; set; }
+        }
 
         [Bind("Street")]
-        private record Address13(int Number, string Street, string City, string State);
+        private class Address13
+        {
+            public int Number { get; set; }
+
+            public string Street { get; set; }
+
+            public string City { get; set; }
+
+            public string State { get; set; }
+        }
 
         // Make sure the metadata is honored when a [Bind] attribute is associated with a class somewhere in the type
         // hierarchy of an action parameter. This should behave identically to such an attribute on a property in the
@@ -2796,7 +2946,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Person13),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(
+            var testContext = GetTestContext(
                 request => request.QueryString = new QueryString(
                     "?Address.Number=23&Address.Street=someStreet&Address.City=Redmond&Address.State=WA"));
 
@@ -2851,7 +3001,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Address13),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(
+            var testContext = GetTestContext(
                 request => request.QueryString = new QueryString("?Number=23&Street=someStreet&City=Redmond&State=WA"));
 
             var modelState = testContext.ModelState;
@@ -2886,10 +3036,12 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal(ModelValidationState.Valid, entry.ValidationState);
         }
 
-        private record Product(int ProductId)
+        private class Product
         {
+            public int ProductId { get; set; }
+
             public string Name { get; }
-            
+
             public IList<string> Aliases { get; }
         }
 
@@ -2897,7 +3049,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
         [InlineData("?parameter.ProductId=10")]
         [InlineData("?parameter.ProductId=10&parameter.Name=Camera")]
         [InlineData("?parameter.ProductId=10&parameter.Name=Camera&parameter.Aliases[0]=Camera1")]
-        public async Task ConstructorBinder_BindsSettableProperties(string queryString)
+        public async Task ComplexTypeModelBinder_BindsSettableProperties(string queryString)
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2907,7 +3059,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the ComplexTypeModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString(queryString);
                 SetJsonBodyContent(request, AddressBodyContent);
@@ -2937,12 +3089,23 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Null(model.Aliases);
         }
 
-        private record Photo(string Id, KeyValuePair<string, LocationInfo> Info);
+        private class Photo
+        {
+            public string Id { get; set; }
 
-        private record LocationInfo([FromHeader] string GpsCoordinates, int Zipcode);
+            public KeyValuePair<string, LocationInfo> Info { get; set; }
+        }
+
+        private class LocationInfo
+        {
+            [FromHeader]
+            public string GpsCoordinates { get; set; }
+
+            public int Zipcode { get; set; }
+        }
 
         [Fact]
-        public async Task ConstructorBinder_BindsKeyValuePairProperty_HavingFromHeaderProperty_Success()
+        public async Task MutableObjectModelBinder_BindsKeyValuePairProperty_HavingFromHeaderProperty_Success()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -2952,7 +3115,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             };
 
             // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.Headers.Add("GpsCoordinates", "10,20");
                 request.QueryString = new QueryString("?Id=1&Info.Key=location1&Info.Value.Zipcode=98052");
@@ -3006,11 +3169,15 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal("10,20", entry.RawValue);
         }
 
-        private record Person5(string Name, IFormFile Photo);
+        private class Person5
+        {
+            public string Name { get; set; }
+            public IFormFile Photo { get; set; }
+        }
 
         // Regression test for #4802.
         [Fact]
-        public async Task ConstructorBinder_ReportsFailureToCollectionModelBinder()
+        public async Task ComplexTypeModelBinder_ReportsFailureToCollectionModelBinder()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -3019,7 +3186,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(IList<Person5>),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 SetFormFileBodyContent(request, "Hello world!", "[0].Photo");
 
@@ -3062,9 +3229,16 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Null(state.Value.RawValue);
         }
 
-        private record TestModel(TestInnerModel[] InnerModels);
+        private class TestModel
+        {
+            public TestInnerModel[] InnerModels { get; set; } = Array.Empty<TestInnerModel>();
+        }
 
-        private record TestInnerModel([ModelBinder(BinderType = typeof(NumberModelBinder))] decimal Rate);
+        private class TestInnerModel
+        {
+            [ModelBinder(BinderType = typeof(NumberModelBinder))]
+            public decimal Rate { get; set; }
+        }
 
         private class NumberModelBinder : IModelBinder
         {
@@ -3084,7 +3258,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
 
         // Regression test for #4939.
         [Fact]
-        public async Task ConstructorBinder_ReportsFailureToCollectionModelBinder_CustomBinder()
+        public async Task ComplexTypeModelBinder_ReportsFailureToCollectionModelBinder_CustomBinder()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -3093,7 +3267,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(TestModel),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 request.QueryString = new QueryString(
                     "?parameter.InnerModels[0].Rate=1,000.00&parameter.InnerModels[1].Rate=2000");
@@ -3145,11 +3319,18 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 });
         }
 
-        private record Person6(string Name, Person6 Mother, IFormFile Photo);
+        private class Person6
+        {
+            public string Name { get; set; }
+
+            public Person6 Mother { get; set; }
+
+            public IFormFile Photo { get; set; }
+        }
 
         // Regression test for #6616.
         [Fact]
-        public async Task ConstructorBinder_ReportsFailureToConstructorBinder_NearTopLevel()
+        public async Task ComplexTypeModelBinder_ReportsFailureToComplexTypeModelBinder_NearTopLevel()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -3158,7 +3339,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Person6),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 SetFormFileBodyContent(request, "Hello world!", "Photo");
             });
@@ -3200,7 +3381,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
 
         // Regression test for #6616.
         [Fact]
-        public async Task ConstructorBinder_ReportsFailureToComplexTypeModelBinder()
+        public async Task ComplexTypeModelBinder_ReportsFailureToComplexTypeModelBinder()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -3209,7 +3390,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Person6),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 SetFormFileBodyContent(request, "Hello world!", "Photo");
                 SetFormFileBodyContent(request, "Hello Mom!", "Mother.Photo");
@@ -3268,11 +3449,18 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 });
         }
 
-        private record Person7(string Name, IList<Person7> Children, IFormFile Photo);
+        private class Person7
+        {
+            public string Name { get; set; }
+
+            public IList<Person7> Children { get; set; }
+
+            public IFormFile Photo { get; set; }
+        }
 
         // Regression test for #6616.
         [Fact]
-        public async Task ConstructorBinder_ReportsFailureToConstructorBinder_ViaCollection()
+        public async Task ComplexTypeModelBinder_ReportsFailureToComplexTypeModelBinder_ViaCollection()
         {
             // Arrange
             var parameter = new ParameterDescriptor()
@@ -3281,7 +3469,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(Person7),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
+            var testContext = GetTestContext(request =>
             {
                 SetFormFileBodyContent(request, "Hello world!", "Photo");
                 SetFormFileBodyContent(request, "Hello Fred!", "Children[0].Photo");
@@ -3341,7 +3529,13 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.True(modelState.IsValid);
         }
 
-        private record LoopyModel([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound, LoopyModel SelfReference);
+        private class LoopyModel
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
+
+            public LoopyModel SelfReference { get; set; }
+        }
 
         // Regression test for #7052
         [Fact]
@@ -3360,7 +3554,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(LoopyModel),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext();
+            var testContext = GetTestContext();
             var modelState = testContext.ModelState;
             var metadata = testContext.MetadataProvider.GetMetadataForType(parameter.ParameterType);
             var valueProvider = await CompositeValueProvider.CreateAsync(testContext);
@@ -3372,9 +3566,19 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal(expectedMessage, exception.Message);
         }
 
-        private record TwoDeepModel([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound);
+        private class TwoDeepModel
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
+        }
 
-        private record ThreeDeepModel([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound, TwoDeepModel Inner);
+        private class ThreeDeepModel
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
+
+            public TwoDeepModel Inner { get; set; }
+        }
 
         // Ensure model binding system allows MaxModelBindingRecursionDepth binders on the stack.
         [Fact]
@@ -3387,7 +3591,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(ThreeDeepModel),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(
+            var testContext = GetTestContext(
                 updateOptions: options => options.MaxModelBindingRecursionDepth = 3);
 
             var modelState = testContext.ModelState;
@@ -3409,7 +3613,13 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.True(model.Inner.IsBound);
         }
 
-        private record FourDeepModel([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound, ThreeDeepModel Inner);
+        private class FourDeepModel
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
+
+            public ThreeDeepModel Inner { get; set; }
+        }
 
         // Ensure model binding system disallows one more than MaxModelBindingRecursionDepth binders on the stack.
         [Fact]
@@ -3428,7 +3638,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(FourDeepModel),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext(
+            var testContext = GetTestContext(
                 updateOptions: options => options.MaxModelBindingRecursionDepth = 3);
 
             var modelState = testContext.ModelState;
@@ -3442,11 +3652,29 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             Assert.Equal(expectedMessage, exception.Message);
         }
 
-        private record LoopyModel1([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound, LoopyModel2 Inner);
+        private class LoopyModel1
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
 
-        private record LoopyModel2([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound, LoopyModel3 Inner);
+            public LoopyModel2 Inner { get; set; }
+        }
 
-        private record LoopyModel3([ModelBinder(typeof(SuccessfulModelBinder))] bool IsBound, LoopyModel1 Inner);
+        private class LoopyModel2
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
+
+            public LoopyModel3 Inner { get; set; }
+        }
+
+        private class LoopyModel3
+        {
+            [ModelBinder(typeof(SuccessfulModelBinder))]
+            public bool IsBound { get; set; }
+
+            public LoopyModel1 Inner { get; set; }
+        }
 
         [Fact]
         public async Task ModelBindingSystem_ThrowsOn33Binders_WithIndirectModelTypeLoop()
@@ -3464,7 +3692,7 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
                 ParameterType = typeof(LoopyModel1),
             };
 
-            var testContext = ModelBindingTestHelper.GetTestContext();
+            var testContext = GetTestContext();
             var modelState = testContext.ModelState;
             var metadata = testContext.MetadataProvider.GetMetadataForType(parameter.ParameterType);
             var valueProvider = await CompositeValueProvider.CreateAsync(testContext);
@@ -3474,142 +3702,6 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => parameterBinder.BindModelAsync(parameter, testContext));
             Assert.Equal(expectedMessage, exception.Message);
-        }
-
-        private record RecordTypeWithSettableProperty1(string Name)
-        {
-            public int Age { get; set; }
-        }
-
-        [Fact]
-        public async Task RecordTypeWithBoundParametersAndProperties_NoData()
-        {
-            // Arrange
-            var parameter = new ParameterDescriptor()
-            {
-                Name = "parameter",
-                ParameterType = typeof(RecordTypeWithSettableProperty1)
-            };
-
-            // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
-            {
-                request.QueryString = new QueryString("?");
-            });
-
-            var modelState = testContext.ModelState;
-            var metadata = GetMetadata(testContext, parameter);
-            var modelBinder = GetModelBinder(testContext, parameter, metadata);
-            var valueProvider = await CompositeValueProvider.CreateAsync(testContext);
-            var parameterBinder = ModelBindingTestHelper.GetParameterBinder(testContext);
-
-            // Act
-            var modelBindingResult = await parameterBinder.BindModelAsync(
-                testContext,
-                modelBinder,
-                valueProvider,
-                parameter,
-                metadata,
-                value: null);
-
-            // Assert
-            Assert.True(modelBindingResult.IsModelSet);
-
-            var model = Assert.IsType<RecordTypeWithSettableProperty1>(modelBindingResult.Model);
-            Assert.Null(model.Name);
-            Assert.Equal(0, model.Age);
-
-            Assert.Empty(modelState);
-            Assert.Equal(0, modelState.ErrorCount);
-            Assert.True(modelState.IsValid);
-        }
-
-        [Fact]
-        public async Task RecordTypeWithBoundParametersAndProperties_ValueForParameter()
-        {
-            // Arrange
-            var parameter = new ParameterDescriptor()
-            {
-                Name = "parameter",
-                ParameterType = typeof(RecordTypeWithSettableProperty1)
-            };
-
-            // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
-            {
-                request.QueryString = new QueryString("?name=TestName");
-            });
-
-            var modelState = testContext.ModelState;
-            var metadata = GetMetadata(testContext, parameter);
-            var modelBinder = GetModelBinder(testContext, parameter, metadata);
-            var valueProvider = await CompositeValueProvider.CreateAsync(testContext);
-            var parameterBinder = ModelBindingTestHelper.GetParameterBinder(testContext);
-
-            // Act
-            var modelBindingResult = await parameterBinder.BindModelAsync(
-                testContext,
-                modelBinder,
-                valueProvider,
-                parameter,
-                metadata,
-                value: null);
-
-            // Assert
-            Assert.True(modelBindingResult.IsModelSet);
-
-            var model = Assert.IsType<RecordTypeWithSettableProperty1>(modelBindingResult.Model);
-            Assert.Equal("TestName", model.Name);
-            Assert.Equal(0, model.Age);
-
-            var entry = Assert.Single(modelState);
-            Assert.Equal("Name", entry.Key);
-            Assert.Equal(0, modelState.ErrorCount);
-            Assert.True(modelState.IsValid);
-        }
-
-        [Fact]
-        public async Task RecordTypeWithBoundParametersAndProperties_ValueForProperty()
-        {
-            // Arrange
-            var parameter = new ParameterDescriptor()
-            {
-                Name = "parameter",
-                ParameterType = typeof(RecordTypeWithSettableProperty1)
-            };
-
-            // Need to have a key here so that the MutableObjectModelBinder will recurse to bind elements.
-            var testContext = ModelBindingTestHelper.GetTestContext(request =>
-            {
-                request.QueryString = new QueryString("?age=28");
-            });
-
-            var modelState = testContext.ModelState;
-            var metadata = GetMetadata(testContext, parameter);
-            var modelBinder = GetModelBinder(testContext, parameter, metadata);
-            var valueProvider = await CompositeValueProvider.CreateAsync(testContext);
-            var parameterBinder = ModelBindingTestHelper.GetParameterBinder(testContext);
-
-            // Act
-            var modelBindingResult = await parameterBinder.BindModelAsync(
-                testContext,
-                modelBinder,
-                valueProvider,
-                parameter,
-                metadata,
-                value: null);
-
-            // Assert
-            Assert.True(modelBindingResult.IsModelSet);
-
-            var model = Assert.IsType<RecordTypeWithSettableProperty1>(modelBindingResult.Model);
-            Assert.Null(model.Name);
-            Assert.Equal(28, model.Age);
-
-            var entry = Assert.Single(modelState);
-            Assert.Equal("Age", entry.Key);
-            Assert.Equal(0, modelState.ErrorCount);
-            Assert.True(modelState.IsValid);
         }
 
         private static void SetJsonBodyContent(HttpRequest request, string content)
@@ -3672,5 +3764,11 @@ namespace Microsoft.AspNetCore.Mvc.IntegrationTests
 
             return factory.CreateBinder(factoryContext);
         }
+
+        protected virtual ModelBindingTestContext GetTestContext(
+            Action<HttpRequest> updateRequest = null,
+            Action<MvcOptions> updateOptions = null,
+            IModelMetadataProvider metadataProvider = null) 
+            => ModelBindingTestHelper.GetTestContext(updateRequest, updateOptions, actionDescriptor: null, metadataProvider);
     }
 }
